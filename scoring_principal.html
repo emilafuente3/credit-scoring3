@@ -565,15 +565,13 @@ tr:last-child td{border-bottom:none}tr:hover td{background:var(--g50)}
     <div id="cfg-test" style="margin-top:10px;font-size:12px"></div>
 
     <div class="sec" style="margin-top:18px">Script para Apps Script</div>
-    <div style="background:#1e293b;border-radius:9px;padding:14px;font-family:'DM Mono',monospace;font-size:11px;color:#e2e8f0;line-height:1.7;white-space:pre-wrap;overflow-x:auto" id="script-block">function doPost(e) {
-  var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('Evaluaciones') 
+    <div style="background:#1e293b;border-radius:9px;padding:14px;font-family:'DM Mono',monospace;font-size:11px;color:#e2e8f0;line-height:1.7;white-space:pre-wrap;overflow-x:auto" id="script-block">function execAction(data) {
+  var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('Evaluaciones')
     || SpreadsheetApp.getActiveSpreadsheet().insertSheet('Evaluaciones');
-  
-  var data = JSON.parse(e.postData.contents);
   var action = data.action;
-  
+
   if (action === 'save') {
-    var row = data.row;
+    var row = data.row || data;
     if (sheet.getLastRow() === 0) {
       sheet.appendRow(['ID','Fecha','Cliente','País','Moneda','Período','Monto','Score',
         'Nivel','Límite Aprobado','LMT','%','Fecha Revisión','Próx. Revisión','Veto','Nivel Auth','Score A','Score B','Analista']);
@@ -583,7 +581,7 @@ tr:last-child td{border-bottom:none}tr:hover td{background:var(--g50)}
       row.fecha,row.proxRevision,row.anyVeto?'SÍ':'No','Nivel '+(row.nivelAuth+1),row.sA,row.sB,row.analista||'']);
     return ContentService.createTextOutput(JSON.stringify({ok:true})).setMimeType(ContentService.MimeType.JSON);
   }
-  
+
   if (action === 'delete') {
     var id = data.id;
     var rows = sheet.getDataRange().getValues();
@@ -592,14 +590,31 @@ tr:last-child td{border-bottom:none}tr:hover td{background:var(--g50)}
     }
     return ContentService.createTextOutput(JSON.stringify({ok:true})).setMimeType(ContentService.MimeType.JSON);
   }
-  
+
   if (action === 'clear') {
     if (sheet.getLastRow() > 1) sheet.deleteRows(2, sheet.getLastRow()-1);
     return ContentService.createTextOutput(JSON.stringify({ok:true})).setMimeType(ContentService.MimeType.JSON);
   }
 }
 
+function doPost(e) {
+  try {
+    var data = JSON.parse(e.postData.contents);
+    return execAction(data);
+  } catch(err) {
+    return ContentService.createTextOutput(JSON.stringify({ok:false,err:err.message})).setMimeType(ContentService.MimeType.JSON);
+  }
+}
+
 function doGet(e) {
+  if (e.parameter && e.parameter.action) {
+    var data = {action: e.parameter.action};
+    if (e.parameter.id) data.id = e.parameter.id;
+    if (e.parameter.data) {
+      try { var parsed = JSON.parse(decodeURIComponent(e.parameter.data)); for (var k in parsed) data[k] = parsed[k]; } catch(err) {}
+    }
+    return execAction(data);
+  }
   var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('Evaluaciones');
   if (!sheet || sheet.getLastRow() <= 1) {
     return ContentService.createTextOutput(JSON.stringify([])).setMimeType(ContentService.MimeType.JSON);
@@ -973,7 +988,7 @@ function calc(){
   var cfg=getCfg();
   var ev={id:Date.now(),fecha:hoy,proxRevision:nxtStr,nombre:nom,pais:pai,moneda:mon,p2:pp2,monto:msol,score:tot,nivel:nv,pct:pct,limiteAprobado:laprov,lmt:Math.round(lmt),nivelAuth:an,anyVeto:anyV,sA:sA,sB:sB,analista:cfg.analista||''};
   if(cfg.url){
-    fetch(cfg.url,{method:'POST',body:JSON.stringify({action:'save',row:ev})})
+    fetch(cfg.url+'?action=save&data='+encodeURIComponent(JSON.stringify(ev)))
     .then(()=>{document.getElementById('save-status').textContent='✓ Guardado en historial compartido';})
     .catch(()=>{document.getElementById('save-status').textContent='⚠ Guardado local (sin conexión al Sheet)';});
   }
@@ -1434,7 +1449,7 @@ async function doDelete(id){
   var cfg=getCfg();
   if(cfg.url){
     try{
-      fetch(cfg.url,{method:'POST',body:JSON.stringify({action:'delete',id:String(id)})});
+      fetch(cfg.url+'?action=delete&id='+encodeURIComponent(String(id)));
       await new Promise(function(r){setTimeout(r,1400);});
     }catch(e){console.error('Delete error:',e);}
   }
@@ -1446,7 +1461,7 @@ async function doClear(){
   var cfg=getCfg();
   if(cfg.url){
     try{
-      fetch(cfg.url,{method:'POST',body:JSON.stringify({action:'clear'})});
+      fetch(cfg.url+'?action=clear');
       await new Promise(function(r){setTimeout(r,1400);});
     }catch(e){}
   }
