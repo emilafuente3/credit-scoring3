@@ -168,6 +168,33 @@ tr:last-child td{border-bottom:none}tr:hover td{background:var(--g50)}
   </div>
 </div>
 
+<!-- PIN CHANGE MODAL -->
+<div class="modal-bg" id="pinchg-modal">
+  <div class="modal">
+    <div id="pinchg-s1">
+      <h3>🔐 Verificar PIN actual</h3>
+      <p style="font-size:13px;color:var(--g600);margin-bottom:16px;line-height:1.5">Ingresá el PIN actual para poder cambiarlo.</p>
+      <input class="pin-input" type="password" id="pinchg-cur" maxlength="6" placeholder="••••">
+      <div class="modal-err" id="pinchg-e1">PIN incorrecto. Intentá nuevamente.</div>
+      <div class="btn-row" style="margin-top:14px">
+        <button class="btn bp" onclick="pinChgVerify()">Continuar</button>
+        <button class="btn bs" onclick="closePinChg()">Cancelar</button>
+      </div>
+    </div>
+    <div id="pinchg-s2" style="display:none">
+      <h3>🔐 Nuevo PIN</h3>
+      <p style="font-size:13px;color:var(--g600);margin-bottom:16px;line-height:1.5">Ingresá el nuevo PIN de administrador (4–6 dígitos).</p>
+      <input class="pin-input" type="password" id="pinchg-new" maxlength="6" placeholder="Nuevo PIN" style="margin-bottom:10px">
+      <input class="pin-input" type="password" id="pinchg-cfm" maxlength="6" placeholder="Confirmar PIN">
+      <div class="modal-err" id="pinchg-e2">Los PINs no coinciden.</div>
+      <div class="btn-row" style="margin-top:14px">
+        <button class="btn bp" onclick="pinChgSave()">Guardar PIN</button>
+        <button class="btn bs" onclick="closePinChg()">Cancelar</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <!-- IMPORT MODAL -->
 <div class="modal-bg" id="import-modal">
   <div class="modal" style="width:420px">
@@ -522,9 +549,12 @@ tr:last-child td{border-bottom:none}tr:hover td{background:var(--g50)}
     </div>
     <div class="g2" style="margin-bottom:12px">
       <div>
-        <label>PIN del equipo (4–6 dígitos)</label>
-        <input type="password" id="cfg-pin" maxlength="6" placeholder="Ej: 1234" oninput="saveCfg()">
-        <div style="font-size:10px;color:var(--g400);margin-top:3px">Protege eliminación de evaluaciones del historial.</div>
+        <label>PIN de administrador</label>
+        <div style="display:flex;align-items:center;gap:8px;padding:8px 11px;border:1.5px solid var(--bdr);border-radius:7px;background:var(--g50)">
+          <span style="font-size:13px;color:var(--g600);flex:1" id="pin-status-txt">No configurado</span>
+          <button class="btn bs bsm" onclick="openPinChg()">Cambiar PIN</button>
+        </div>
+        <div style="font-size:10px;color:var(--g400);margin-top:3px">Solo el administrador puede cambiar el PIN de eliminación.</div>
       </div>
       <div>
         <label>Nombre del analista (para registro)</label>
@@ -619,15 +649,63 @@ function getCfg(){ try{ var c=JSON.parse(localStorage.getItem(CFG_KEY)||'{}'); i
 function saveCfg(){
   var cfg = getCfg();
   cfg.url = document.getElementById('cfg-url').value.trim();
-  cfg.pin = document.getElementById('cfg-pin').value;
   cfg.analista = document.getElementById('cfg-analista').value.trim();
   localStorage.setItem(CFG_KEY, JSON.stringify(cfg));
 }
 function loadCfg(){
   var cfg = getCfg();
   document.getElementById('cfg-url').value = cfg.url||SHEET_URL;
-  document.getElementById('cfg-pin').value = cfg.pin||'';
   document.getElementById('cfg-analista').value = cfg.analista||'';
+  updatePinStatus();
+}
+function updatePinStatus(){
+  var cfg=getCfg();
+  var el=document.getElementById('pin-status-txt');
+  if(!el)return;
+  el.textContent=cfg.pin?'✓ Configurado':'No configurado (default: 1234)';
+}
+function openPinChg(){
+  var cfg=getCfg();
+  document.getElementById('pinchg-cur').value='';
+  document.getElementById('pinchg-new').value='';
+  document.getElementById('pinchg-cfm').value='';
+  document.getElementById('pinchg-e1').style.display='none';
+  document.getElementById('pinchg-e2').style.display='none';
+  if(!cfg.pin){
+    document.getElementById('pinchg-s1').style.display='none';
+    document.getElementById('pinchg-s2').style.display='block';
+  } else {
+    document.getElementById('pinchg-s1').style.display='block';
+    document.getElementById('pinchg-s2').style.display='none';
+  }
+  document.getElementById('pinchg-modal').classList.add('show');
+}
+function closePinChg(){
+  document.getElementById('pinchg-modal').classList.remove('show');
+}
+function pinChgVerify(){
+  var val=document.getElementById('pinchg-cur').value;
+  var cfg=getCfg();
+  if(val===cfg.pin){
+    document.getElementById('pinchg-s1').style.display='none';
+    document.getElementById('pinchg-s2').style.display='block';
+    document.getElementById('pinchg-new').focus();
+  } else {
+    document.getElementById('pinchg-e1').style.display='block';
+    document.getElementById('pinchg-cur').value='';
+  }
+}
+function pinChgSave(){
+  var np=document.getElementById('pinchg-new').value;
+  var nc=document.getElementById('pinchg-cfm').value;
+  var e2=document.getElementById('pinchg-e2');
+  if(np.length<4){e2.textContent='Mínimo 4 dígitos.';e2.style.display='block';return;}
+  if(np!==nc){e2.textContent='Los PINs no coinciden.';e2.style.display='block';return;}
+  var cfg=getCfg();
+  cfg.pin=np;
+  localStorage.setItem(CFG_KEY,JSON.stringify(cfg));
+  closePinChg();
+  updatePinStatus();
 }
 
 // ── TABS ──────────────────────────────────────────────────────────────────────
@@ -1343,9 +1421,10 @@ function checkPIN(){
   var pin=cfg.pin||'1234';
   if(val.length<pin.length) return;
   if(val===pin){
+    var action=pinAction, param=pinParam;
     closePin();
-    if(pinAction==='del') doDelete(pinParam);
-    else if(pinAction==='clearAll') doClear();
+    if(action==='del') doDelete(param);
+    else if(action==='clearAll') doClear();
   } else {
     document.getElementById('pin-err').style.display='block';
     document.getElementById('pin-input').value='';
@@ -1353,26 +1432,23 @@ function checkPIN(){
 }
 async function doDelete(id){
   var cfg=getCfg();
-  var deleted=false;
   if(cfg.url){
     try{
-      var res=await fetch(cfg.url,{method:'POST',body:JSON.stringify({action:'delete',id:String(id)})});
-      var json=await res.json();
-      deleted=json.ok===true;
+      fetch(cfg.url,{method:'POST',body:JSON.stringify({action:'delete',id:String(id)})});
+      await new Promise(function(r){setTimeout(r,1400);});
     }catch(e){console.error('Delete error:',e);}
   }
-  // Also clean local backup
   var local=JSON.parse(localStorage.getItem('credit_evals_backup')||'[]').filter(function(e){return String(e.id)!==String(id);});
   localStorage.setItem('credit_evals_backup',JSON.stringify(local));
   await refreshHistory();
-  if(!deleted&&cfg.url){
-    console.warn('Delete may not have worked on Sheet. Refreshing...');
-  }
 }
 async function doClear(){
   var cfg=getCfg();
   if(cfg.url){
-    try{await fetch(cfg.url,{method:'POST',body:JSON.stringify({action:'clear'})});}catch(e){}
+    try{
+      fetch(cfg.url,{method:'POST',body:JSON.stringify({action:'clear'})});
+      await new Promise(function(r){setTimeout(r,1400);});
+    }catch(e){}
   }
   localStorage.removeItem('credit_evals_backup');
   await refreshHistory();
