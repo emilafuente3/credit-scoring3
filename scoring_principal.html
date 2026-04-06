@@ -159,10 +159,11 @@ tr:last-child td{border-bottom:none}tr:hover td{background:var(--g50)}
 <div class="modal-bg" id="pin-modal">
   <div class="modal">
     <h3>🔒 PIN requerido</h3>
-    <p id="pin-msg">Ingresá el PIN del equipo para continuar.</p>
-    <input class="pin-input" type="password" id="pin-input" maxlength="6" placeholder="••••" oninput="checkPIN()">
+    <p id="pin-msg" style="font-size:13px;color:var(--g600);margin-bottom:16px;line-height:1.5">Ingresá el PIN para continuar.</p>
+    <input class="pin-input" type="password" id="pin-input" maxlength="6" placeholder="••••" onkeydown="if(event.key==='Enter')checkPIN()">
     <div class="modal-err" id="pin-err">PIN incorrecto. Intentá nuevamente.</div>
     <div class="btn-row" style="margin-top:14px">
+      <button class="btn bp" onclick="checkPIN()">Confirmar</button>
       <button class="btn bs" onclick="closePin()">Cancelar</button>
     </div>
   </div>
@@ -173,7 +174,7 @@ tr:last-child td{border-bottom:none}tr:hover td{background:var(--g50)}
   <div class="modal">
     <div id="pinchg-s1">
       <h3>🔐 Verificar PIN actual</h3>
-      <p style="font-size:13px;color:var(--g600);margin-bottom:16px;line-height:1.5">Ingresá el PIN actual para poder cambiarlo.</p>
+      <p style="font-size:13px;color:var(--g600);margin-bottom:16px;line-height:1.5">Ingresá el PIN actual. Si es la primera vez que lo configurás, dejá este campo vacío.</p>
       <input class="pin-input" type="password" id="pinchg-cur" maxlength="6" placeholder="••••">
       <div class="modal-err" id="pinchg-e1">PIN incorrecto. Intentá nuevamente.</div>
       <div class="btn-row" style="margin-top:14px">
@@ -565,9 +566,20 @@ tr:last-child td{border-bottom:none}tr:hover td{background:var(--g50)}
     <div id="cfg-test" style="margin-top:10px;font-size:12px"></div>
 
     <div class="sec" style="margin-top:18px">Script para Apps Script</div>
-    <div style="background:#1e293b;border-radius:9px;padding:14px;font-family:'DM Mono',monospace;font-size:11px;color:#e2e8f0;line-height:1.7;white-space:pre-wrap;overflow-x:auto" id="script-block">function execAction(data) {
-  var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('Evaluaciones')
-    || SpreadsheetApp.getActiveSpreadsheet().insertSheet('Evaluaciones');
+    <div style="background:#1e293b;border-radius:9px;padding:14px;font-family:'DM Mono',monospace;font-size:11px;color:#e2e8f0;line-height:1.7;white-space:pre-wrap;overflow-x:auto" id="script-block">function getPin_() {
+  var s = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('_Config');
+  return s ? String(s.getRange('B1').getValue()) : '';
+}
+function setPin_(pin) {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var s = ss.getSheetByName('_Config') || ss.insertSheet('_Config');
+  s.getRange('A1').setValue('admin_pin');
+  s.getRange('B1').setValue(String(pin));
+}
+
+function execAction(data) {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sheet = ss.getSheetByName('Evaluaciones') || ss.insertSheet('Evaluaciones');
   var action = data.action;
 
   if (action === 'save') {
@@ -583,6 +595,10 @@ tr:last-child td{border-bottom:none}tr:hover td{background:var(--g50)}
   }
 
   if (action === 'delete') {
+    var stored = getPin_();
+    if (stored && String(data.pin) !== stored) {
+      return ContentService.createTextOutput(JSON.stringify({ok:false,err:'pin'})).setMimeType(ContentService.MimeType.JSON);
+    }
     var id = data.id;
     var rows = sheet.getDataRange().getValues();
     for (var i = 1; i < rows.length; i++) {
@@ -592,9 +608,24 @@ tr:last-child td{border-bottom:none}tr:hover td{background:var(--g50)}
   }
 
   if (action === 'clear') {
+    var stored = getPin_();
+    if (stored && String(data.pin) !== stored) {
+      return ContentService.createTextOutput(JSON.stringify({ok:false,err:'pin'})).setMimeType(ContentService.MimeType.JSON);
+    }
     if (sheet.getLastRow() > 1) sheet.deleteRows(2, sheet.getLastRow()-1);
     return ContentService.createTextOutput(JSON.stringify({ok:true})).setMimeType(ContentService.MimeType.JSON);
   }
+
+  if (action === 'setPin') {
+    var stored = getPin_();
+    if (stored && String(data.oldPin) !== stored) {
+      return ContentService.createTextOutput(JSON.stringify({ok:false,err:'pin'})).setMimeType(ContentService.MimeType.JSON);
+    }
+    setPin_(data.newPin);
+    return ContentService.createTextOutput(JSON.stringify({ok:true})).setMimeType(ContentService.MimeType.JSON);
+  }
+
+  return ContentService.createTextOutput(JSON.stringify({ok:false,err:'unknown'})).setMimeType(ContentService.MimeType.JSON);
 }
 
 function doPost(e) {
@@ -609,9 +640,10 @@ function doPost(e) {
 function doGet(e) {
   if (e.parameter && e.parameter.action) {
     var data = {action: e.parameter.action};
-    if (e.parameter.id) data.id = e.parameter.id;
+    var keys = ['id','pin','oldPin','newPin'];
+    keys.forEach(function(k){ if(e.parameter[k]) data[k]=e.parameter[k]; });
     if (e.parameter.data) {
-      try { var parsed = JSON.parse(decodeURIComponent(e.parameter.data)); for (var k in parsed) data[k] = parsed[k]; } catch(err) {}
+      try { var p=JSON.parse(e.parameter.data); for(var k in p) data[k]=p[k]; } catch(err) {}
     }
     return execAction(data);
   }
@@ -623,7 +655,7 @@ function doGet(e) {
   var headers = rows[0];
   var result = rows.slice(1).map(function(r) {
     var obj = {};
-    headers.forEach(function(h,i){ obj[h] = r[i]; });
+    headers.forEach(function(h,i){ obj[h]=r[i]; });
     return obj;
   });
   return ContentService.createTextOutput(JSON.stringify(result)).setMimeType(ContentService.MimeType.JSON);
@@ -674,53 +706,45 @@ function loadCfg(){
   updatePinStatus();
 }
 function updatePinStatus(){
-  var cfg=getCfg();
   var el=document.getElementById('pin-status-txt');
   if(!el)return;
-  el.textContent=cfg.pin?'✓ Configurado':'No configurado (default: 1234)';
+  var cfg=getCfg();
+  el.textContent=cfg.url?'Guardado en Google Sheets':'Configurá la URL del script primero';
 }
 function openPinChg(){
-  var cfg=getCfg();
   document.getElementById('pinchg-cur').value='';
   document.getElementById('pinchg-new').value='';
   document.getElementById('pinchg-cfm').value='';
   document.getElementById('pinchg-e1').style.display='none';
   document.getElementById('pinchg-e2').style.display='none';
-  if(!cfg.pin){
-    document.getElementById('pinchg-s1').style.display='none';
-    document.getElementById('pinchg-s2').style.display='block';
-  } else {
-    document.getElementById('pinchg-s1').style.display='block';
-    document.getElementById('pinchg-s2').style.display='none';
-  }
+  document.getElementById('pinchg-s1').style.display='block';
+  document.getElementById('pinchg-s2').style.display='none';
   document.getElementById('pinchg-modal').classList.add('show');
 }
 function closePinChg(){
   document.getElementById('pinchg-modal').classList.remove('show');
 }
 function pinChgVerify(){
-  var val=document.getElementById('pinchg-cur').value;
-  var cfg=getCfg();
-  if(val===cfg.pin){
-    document.getElementById('pinchg-s1').style.display='none';
-    document.getElementById('pinchg-s2').style.display='block';
-    document.getElementById('pinchg-new').focus();
-  } else {
-    document.getElementById('pinchg-e1').style.display='block';
-    document.getElementById('pinchg-cur').value='';
-  }
+  document.getElementById('pinchg-s1').style.display='none';
+  document.getElementById('pinchg-s2').style.display='block';
+  document.getElementById('pinchg-new').focus();
 }
-function pinChgSave(){
+async function pinChgSave(){
   var np=document.getElementById('pinchg-new').value;
   var nc=document.getElementById('pinchg-cfm').value;
   var e2=document.getElementById('pinchg-e2');
   if(np.length<4){e2.textContent='Mínimo 4 dígitos.';e2.style.display='block';return;}
   if(np!==nc){e2.textContent='Los PINs no coinciden.';e2.style.display='block';return;}
+  var oldPin=document.getElementById('pinchg-cur').value;
   var cfg=getCfg();
-  cfg.pin=np;
-  localStorage.setItem(CFG_KEY,JSON.stringify(cfg));
+  if(cfg.url){
+    try{
+      var res=await fetch(cfg.url+'?action=setPin&oldPin='+encodeURIComponent(oldPin)+'&newPin='+encodeURIComponent(np));
+      var json=await res.json();
+      if(!json.ok){e2.textContent='PIN actual incorrecto.';e2.style.display='block';return;}
+    }catch(e){e2.textContent='Error de conexión. Verificá la URL del script.';e2.style.display='block';return;}
+  }
   closePinChg();
-  updatePinStatus();
 }
 
 // ── TABS ──────────────────────────────────────────────────────────────────────
@@ -1430,43 +1454,44 @@ function closePin(){
   document.getElementById('pin-modal').classList.remove('show');
   pinAction=null; pinParam=null;
 }
-function checkPIN(){
+async function checkPIN(){
   var val=document.getElementById('pin-input').value;
-  var cfg=getCfg();
-  var pin=cfg.pin||'1234';
-  if(val.length<pin.length) return;
-  if(val===pin){
-    var action=pinAction, param=pinParam;
-    closePin();
-    if(action==='del') doDelete(param);
-    else if(action==='clearAll') doClear();
-  } else {
-    document.getElementById('pin-err').style.display='block';
-    document.getElementById('pin-input').value='';
-  }
+  if(val.length<4) return;
+  var action=pinAction, param=pinParam;
+  var ok=false;
+  if(action==='del') ok=await doDelete(param,val);
+  else if(action==='clearAll') ok=await doClear(val);
+  if(ok){ closePin(); }
+  else { document.getElementById('pin-err').style.display='block'; document.getElementById('pin-input').value=''; }
 }
-async function doDelete(id){
+async function doDelete(id,pin){
   var cfg=getCfg();
   if(cfg.url){
     try{
-      fetch(cfg.url+'?action=delete&id='+encodeURIComponent(String(id)));
-      await new Promise(function(r){setTimeout(r,1400);});
-    }catch(e){console.error('Delete error:',e);}
+      var res=await fetch(cfg.url+'?action=delete&id='+encodeURIComponent(String(id))+'&pin='+encodeURIComponent(pin||''));
+      var json=await res.json();
+      if(json.ok===false) return false;
+    }catch(e){}
   }
   var local=JSON.parse(localStorage.getItem('credit_evals_backup')||'[]').filter(function(e){return String(e.id)!==String(id);});
   localStorage.setItem('credit_evals_backup',JSON.stringify(local));
+  await new Promise(function(r){setTimeout(r,800);});
   await refreshHistory();
+  return true;
 }
-async function doClear(){
+async function doClear(pin){
   var cfg=getCfg();
   if(cfg.url){
     try{
-      fetch(cfg.url+'?action=clear');
-      await new Promise(function(r){setTimeout(r,1400);});
+      var res=await fetch(cfg.url+'?action=clear&pin='+encodeURIComponent(pin||''));
+      var json=await res.json();
+      if(json.ok===false) return false;
     }catch(e){}
   }
   localStorage.removeItem('credit_evals_backup');
+  await new Promise(function(r){setTimeout(r,800);});
   await refreshHistory();
+  return true;
 }
 
 // ── TEST CONNECTION ───────────────────────────────────────────────────────────
