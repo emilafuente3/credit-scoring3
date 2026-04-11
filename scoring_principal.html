@@ -390,6 +390,7 @@ tr:last-child td{border-bottom:none}tr:hover td{background:var(--g50)}
         <div><label>Servicio de Deuda Anual</label><input type="number" id="sd"></div>
       </div>
       <div class="g3">
+        <div><label>Impuesto a las Ganancias</label><input type="number" id="imp" oninput="aC()"></div>
         <div><label>Utilidad Neta <small style="color:var(--g400);text-transform:none">(auto)</small></label><input type="number" id="un" class="ro" readonly></div>
       </div>
       <div style="font-size:10px;color:var(--g400);margin-top:4px;margin-bottom:13px">Grises: calculados automáticamente. Podés sobrescribir si el balance los muestra directamente.</div>
@@ -793,10 +794,11 @@ function aC(){
   var vn=+document.getElementById('vn').value||0, cv=+document.getElementById('cv').value||0;
   var go=+document.getElementById('go').value||0, da=+document.getElementById('da').value||0;
   var gf=+document.getElementById('gf').value||0;
+  var imp=+document.getElementById('imp').value||0;
   var ub=vn-cv; document.getElementById('ub').value=ub||'';
   var ebit=ub-go-da; document.getElementById('ebit').value=ebit||'';
   document.getElementById('ebitda').value=(ebit+da)||'';
-  document.getElementById('un').value=(ebit-gf)||'';
+  document.getElementById('un').value=(ebit-gf-imp)||'';
   var caja=+document.getElementById('b-caja').value||0, cxc=+document.getElementById('b-cxc').value||0;
   var inv=+document.getElementById('b-inv').value||0, oac=+document.getElementById('b-oac').value||0;
   var anc=+document.getElementById('b-anc').value||0;
@@ -927,8 +929,8 @@ function calc(){
   var tcP=mon==='USD'?1:(+document.getElementById('tc-p').value||1);
   var tcC=mon==='USD'?1:(+document.getElementById('tc-c').value||1);
 
-  var vn2=gv('vn')*tcP, cv2=gv('cv')*tcP, go2=gv('go')*tcP, da2=gv('da')*tcP, gf2=gv('gf')*tcP;
-  var ub2=vn2-cv2, ebit2=ub2-go2-da2, ebitda2=ebit2+da2, un2=ebit2-gf2, sd2=gv('sd')*tcP;
+  var vn2=gv('vn')*tcP, cv2=gv('cv')*tcP, go2=gv('go')*tcP, da2=gv('da')*tcP, gf2=gv('gf')*tcP, imp2=gv('imp')*tcP;
+  var ub2=vn2-cv2, ebit2=ub2-go2-da2, ebitda2=ebit2+da2, un2=ebit2-gf2-imp2, sd2=gv('sd')*tcP;
   var bac2=gv('b-ac')*tcC, bat2=gv('b-at')*tcC, bpc2=gv('b-pc')*tcC, bpt2=gv('b-pt')*tcC;
   var binv2=gv('b-inv')*tcC, bcxc2=gv('b-cxc')*tcC;
   var d2={vn:vn2,ebitda:ebitda2,un:un2,sd:sd2,ac:bac2,at:bat2,pc:bpc2,pt:bpt2,inv:binv2,cxc:bcxc2};
@@ -1534,7 +1536,7 @@ function doImport(){
     if(data.moneda){document.getElementById('cm').value=data.moneda;onMoneda();}
     if(data.p1) document.getElementById('p1').value=data.p1;
     if(data.p2) document.getElementById('p2').value=data.p2;
-    var fields=['vn','cv','go','da','gf','sd','b-caja','b-cxc','b-inv','b-oac','b-anc','b-pc','b-pnc','b-pn','a1-vn','a1-ebitda','a1-un','a1-ac','a1-at','a1-pc','a1-pt','a1-inv','a1-cxc','a1-sd'];
+    var fields=['vn','cv','go','da','gf','imp','sd','b-caja','b-cxc','b-inv','b-oac','b-anc','b-pc','b-pnc','b-pn','a1-vn','a1-ebitda','a1-un','a1-ac','a1-at','a1-pc','a1-pt','a1-inv','a1-cxc','a1-sd'];
     fields.forEach(function(f){if(data[f]!==undefined) document.getElementById(f).value=data[f];});
     aC();
     document.getElementById('import-modal').classList.remove('show');
@@ -1554,7 +1556,7 @@ function resetAll(){
   document.getElementById('cm').value='';document.getElementById('fx-box').style.display='none';
   document.getElementById('lmt-box').style.display='none';document.getElementById('fx-grid').style.display='none';
   document.getElementById('tc-p').value='1';document.getElementById('tc-c').value='1';
-  ['vn','cv','ub','go','da','ebit','ebitda','gf','sd','un',
+  ['vn','cv','ub','go','da','ebit','ebitda','gf','imp','sd','un',
    'b-caja','b-cxc','b-inv','b-oac','b-ac','b-anc','b-at','b-pc','b-pnc','b-pt','b-pn',
    'a1-vn','a1-ebitda','a1-un','a1-ac','a1-at','a1-pc','a1-pt','a1-inv','a1-cxc','a1-sd'
   ].forEach(id=>document.getElementById(id).value='');
